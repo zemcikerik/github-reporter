@@ -1,3 +1,5 @@
+src/constants.ts
+
 # Logs
 logs
 *.log
