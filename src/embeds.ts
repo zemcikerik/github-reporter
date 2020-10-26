@@ -16,7 +16,7 @@ export function sendEmbeds(event: any, channel: TextChannel): Promise<any> {
             return sendIssueCommentEvent(event, channel);
 
         default:
-            return new Promise<any>(() => { console.warn(`Unknown event ${event.type}!`) });
+            return new Promise<any>(() => logUnknownEvent(event));
     }
 }
 
@@ -47,6 +47,14 @@ function trimString(str: string, maxSize: number = 40): string {
     return str.length > maxSize
         ? `${str.substring(0, maxSize - 3)}...`
         : str;
+}
+
+function logUnknownEvent(event: any) {
+    const actorName: string = event.actor.login;
+    const eventType: string = event.type;
+    const repoName: string = event.repo.name;
+    const message: string = `Unknown event '${eventType}' in repository ${repoName} by ${actorName}`;
+    console.warn(message);
 }
 
 async function sendPushEmbeds(event: any, channel: TextChannel): Promise<any> {
