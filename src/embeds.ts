@@ -22,13 +22,14 @@ export function sendEmbeds(event: any, channel: TextChannel): Promise<any> {
 
 function createEmbed(event: any, title: string, description: string, url: string, color: string, fields: EmbedFieldData[] | null = null): MessageEmbed {
     const actor: any = event.actor;
+    const actorUrl: string = `https://github.com/${actor.login}/`;
 
     const embed: MessageEmbed = new MessageEmbed()
         .setTitle(title)
         .setDescription(description)
         .setURL(url)
         .setColor(color)
-        .setAuthor(actor.login, actor.avatar_url)
+        .setAuthor(actor.login, actor.avatar_url, actorUrl)
         .setTimestamp(Date.parse(event.created_at));
 
     if (fields !== null) {
