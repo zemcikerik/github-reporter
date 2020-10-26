@@ -7,7 +7,7 @@ import { filter, map, mergeMap } from 'rxjs/operators';
 
 import { Person } from './models';
 import { sendEmbeds } from './embeds';
-import { USERNAMES, GITHUB_TOKEN, DISCORD_TOKEN, CHANNEL_ID } from './constants';
+import { USERNAMES, GITHUB_TOKEN, DISCORD_TOKEN, CHANNEL_ID, TOTAL_INTERVAL, INDIVIDUAL_INTERVAL } from './constants';
 
 
 const discord: DiscordClient = new DiscordClient();
@@ -16,11 +16,11 @@ let channel: TextChannel;
 const startDate: Date = new Date();
 const people: Person[] = USERNAMES.map(name => ({ username: name, lastRefresh: startDate }));
 
-interval(90000).pipe(
+interval(TOTAL_INTERVAL).pipe(
     mergeMap(_ => 
         zip(
             from(people),
-            interval(2500)
+            interval(INDIVIDUAL_INTERVAL)
         ).pipe(
             map(([person, _]) => person)
         )
@@ -54,7 +54,7 @@ function getNewestEvents(person: Person): Observable<any> {
     });
 
     return from(promise).pipe(
-        mergeMap(response => response.data),
+        mergeMap(response => response.data.reverse()),
         filter((event: any) => new Date(event.created_at) > lastRefresh)
     );
 }
