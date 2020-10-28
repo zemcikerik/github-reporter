@@ -10,10 +10,16 @@ export function sendEmbeds(event: any, channel: TextChannel): Promise<any> {
             return sendCreateEmbed(event, channel);
 
         case 'IssuesEvent':
-            return sendIssueEvent(event, channel);
+            return sendIssueEmbed(event, channel);
 
         case 'IssueCommentEvent':
-            return sendIssueCommentEvent(event, channel);
+            return sendIssueCommentEmbed(event, channel);
+
+        case 'ForkEvent':
+            return sendForkEmbed(event, channel);
+
+        case 'WatchEvent':
+            return sendWatchEmbed(event, channel);
 
         default:
             return new Promise<any>(() => logUnknownEvent(event));
@@ -86,7 +92,7 @@ function createNewBranchEmbed(event: any, repoUrl: string): MessageEmbed {
     return createEmbed(event, event.payload.ref, description, repoUrl, '#00ffa6');
 }
 
-function sendIssueEvent(event: any, channel: TextChannel): Promise<any> {
+function sendIssueEmbed(event: any, channel: TextChannel): Promise<any> {
     const embed: MessageEmbed | null = createIssueEmbed(event);
 
     if (embed === null) {
@@ -135,7 +141,7 @@ function createReopenIssueEmbed(event: any, title: string, issueUrl: string): Me
     return createEmbed(event, title, description, issueUrl, '#9900ff');
 }
 
-function sendIssueCommentEvent(event: any, channel: TextChannel): Promise<any> {
+function sendIssueCommentEmbed(event: any, channel: TextChannel): Promise<any> {
     const title: string = event.payload.issue.title;
     const description: string = `New comment was added to issue in repository ${event.repo.name}!`;
     const commentUrl: string = event.payload.comment.html_url;
@@ -146,5 +152,23 @@ function sendIssueCommentEvent(event: any, channel: TextChannel): Promise<any> {
     };
 
     const embed: MessageEmbed = createEmbed(event, title, description, commentUrl, '#ff00c8', [ bodyField ]);
+    return channel.send(embed);
+}
+
+function sendForkEmbed(event: any, channel: TextChannel): Promise<any> {
+    const title: string = event.payload.forkee.full_name;
+    const description: string = `The repository ${event.repo.name} was forked into ${title}!`;
+    const newRepoUrl: string = `https://github.com/${title}`;
+
+    const embed: MessageEmbed = createEmbed(event, title, description, newRepoUrl, '#f2ff00');
+    return channel.send(embed);
+}
+
+function sendWatchEmbed(event: any, channel: TextChannel): Promise<any> {
+    const title: string = event.repo.name;
+    const description: string = `${event.actor.login} started stargazing the ${event.repo.name} repository!`;
+    const repoUrl: string = getRepoUrl(event);
+
+    const embed: MessageEmbed = createEmbed(event, title, description, repoUrl, '#7a2d00');
     return channel.send(embed);
 }
