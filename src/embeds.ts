@@ -1,174 +1,252 @@
-import { EmbedFieldData, MessageEmbed, TextChannel } from 'discord.js';
+import { ColorResolvable, EmbedFieldData, MessageEmbed, TextChannel } from 'discord.js';
+import { trimString } from './helpers';
 
-
-export function sendEmbeds(event: any, channel: TextChannel): Promise<any> {
-    switch (event.type) {
-        case 'PushEvent':
-            return sendPushEmbeds(event, channel);
-
-        case 'CreateEvent':
-            return sendCreateEmbed(event, channel);
-
-        case 'IssuesEvent':
-            return sendIssueEmbed(event, channel);
-
-        case 'IssueCommentEvent':
-            return sendIssueCommentEmbed(event, channel);
-
-        case 'ForkEvent':
-            return sendForkEmbed(event, channel);
-
-        case 'WatchEvent':
-            return sendWatchEmbed(event, channel);
-
-        default:
-            return new Promise<any>(() => logUnknownEvent(event));
-    }
+export interface EventToEmbedsConverter {
+    convertToEmbed(event: any): MessageEmbed[] | null;
 }
 
-function createEmbed(event: any, title: string, description: string, url: string, color: string, fields: EmbedFieldData[] | null = null): MessageEmbed {
-    const actor: any = event.actor;
-    const actorUrl: string = `https://github.com/${actor.login}/`;
+export interface ChainingEventToEmbedsConverter extends EventToEmbedsConverter {
+    setNextConverter(converter: EventToEmbedsConverter): void;
+}
 
-    const embed: MessageEmbed = new MessageEmbed()
-        .setTitle(title)
-        .setDescription(description)
-        .setURL(url)
-        .setColor(color)
-        .setAuthor(actor.login, actor.avatar_url, actorUrl)
-        .setTimestamp(Date.parse(event.created_at));
+export interface ChainingEventToEmbedsConverterConstructor {
+    new(): ChainingEventToEmbedsConverter;
+}
 
-    if (fields !== null) {
-        embed.addFields(fields);
+export abstract class AbstractChainingEventToEmbedsConverter implements ChainingEventToEmbedsConverter {
+
+    protected nextConverter: EventToEmbedsConverter | undefined;
+
+    constructor (protected color: ColorResolvable) 
+    { }
+
+    protected abstract canConvert(event: any): boolean;
+    protected abstract convert(event: any): MessageEmbed[];
+
+    public convertToEmbed(event: any): MessageEmbed[] | null {
+        return this.canConvert(event)
+            ? this.convert(event)
+            : this.nextConverter?.convertToEmbed(event) ?? null;
+    }
+    
+    protected getRepositoryUrl(event: any): string {
+        return `https://github.com/${event.repo.name}/`;
     }
 
-    return embed;
-}
+    protected createEmbed(event: any, title: string, description: string, url: string): MessageEmbed {
+        const actor: any = event.actor;
+        const actorUrl: string = `https://github.com/${actor.login}/`;
 
-function getRepoUrl(event: any): string {
-    return `https://github.com/${event.repo.name}/`;
-}
-
-function trimString(str: string, maxSize: number = 40): string {
-    return str.length > maxSize
-        ? `${str.substring(0, maxSize - 3)}...`
-        : str;
-}
-
-function logUnknownEvent(event: any) {
-    const actorName: string = event.actor.login;
-    const eventType: string = event.type;
-    const repoName: string = event.repo.name;
-    const message: string = `Unknown event '${eventType}' in repository ${repoName} by ${actorName}`;
-    console.warn(message);
-}
-
-async function sendPushEmbeds(event: any, channel: TextChannel): Promise<any> {
-    const repoUrl: string = getRepoUrl(event);
-    const description: string = `New commit in repository ${event.repo.name} was created!`;
-
-    for (let commit of event.payload.commits) {
-        const embed: MessageEmbed = createEmbed(event, commit.message, description, repoUrl, '#0099ff');
-        await channel.send(embed);
-    }
-}
-
-function sendCreateEmbed(event: any, channel: TextChannel): Promise<any> {
-    const repoUrl: string = getRepoUrl(event);
-
-    const embed: MessageEmbed = event.payload.ref_type === 'branch' 
-        ? createNewBranchEmbed(event, repoUrl)
-        : createNewRepositoryEmbed(event, repoUrl);
-
-    return channel.send(embed); 
-}
-
-function createNewRepositoryEmbed(event: any, repoUrl: string): MessageEmbed {
-    return createEmbed(event, event.repo.name, 'New repository was created!', repoUrl, '#00ff55');
-}
-
-function createNewBranchEmbed(event: any, repoUrl: string): MessageEmbed {
-    const description: string = `New branch in repository ${event.repo.name} was created!`;
-    return createEmbed(event, event.payload.ref, description, repoUrl, '#00ffa6');
-}
-
-function sendIssueEmbed(event: any, channel: TextChannel): Promise<any> {
-    const embed: MessageEmbed | null = createIssueEmbed(event);
-
-    if (embed === null) {
-        return new Promise<any>(() => console.warn(`Unkown issue action ${event.payload.action}!`));
+        return new MessageEmbed()
+            .setTitle(title)
+            .setDescription(description)
+            .setURL(url)
+            .setColor(this.color)
+            .setAuthor(actor.login, actor.avatar_url, actorUrl)
+            .setTimestamp(Date.parse(event.created_at));
     }
 
-    return channel.send(embed);
-}
-
-function createIssueEmbed(event: any): MessageEmbed | null {
-    const title: string = event.payload.issue.title;
-    const issueUrl: string = event.payload.issue.html_url;
-
-    switch (event.payload.action) {
-        case 'opened':
-            return createOpenIssueEmbed(event, title, issueUrl);
-
-        case 'closed':
-            return createCloseIssueEmbed(event, title, issueUrl);
-
-        case 'reopened':
-            return createReopenIssueEmbed(event, title, issueUrl);
-
-        default:
-            return null;
-    }
-}
-
-function createOpenIssueEmbed(event: any, title: string, issueUrl: string): MessageEmbed {
-    const description: string = `New issue in repository ${event.repo.name} was opened!`;
-    const bodyField: EmbedFieldData = {
-        name: 'Issue Content',
-        value: trimString(event.payload.issue.body, 128)
+    public setNextConverter(converter: EventToEmbedsConverter) {
+        this.nextConverter = converter;
     }
 
-    return createEmbed(event, title, description, issueUrl, '#9900ff', [ bodyField ]);
 }
 
-function createCloseIssueEmbed(event: any, title: string, issueUrl: string): MessageEmbed {
-    const description: string = `Issue in repository ${event.repo.name} was closed!`;
-    return createEmbed(event, title, description, issueUrl, '#ff0048');
+export abstract class AbstractChainingSpecificEventToEmbedsConverter extends AbstractChainingEventToEmbedsConverter {
+
+    constructor(protected supportedType: string, color: ColorResolvable) { 
+        super(color);
+    }
+
+    protected canConvert(event: any): boolean {
+        return event?.type === this.supportedType;
+    }
+
 }
 
-function createReopenIssueEmbed(event: any, title: string, issueUrl: string): MessageEmbed {
-    const description: string = `Issue in repository ${event.repo.name} was reopened!`;
-    return createEmbed(event, title, description, issueUrl, '#9900ff');
+export class PushConverter extends AbstractChainingSpecificEventToEmbedsConverter {
+
+    constructor() {
+        super('PushEvent', '#0099ff');
+    }
+
+    protected convert(event: any): MessageEmbed[] {
+        const repoUrl: string = this.getRepositoryUrl(event);
+        const description: string = `New commit in repository ${event.repo.name} was created!`;
+
+        return event.payload.commits.map((commit: any) => 
+            this.createEmbed(event, commit.message, description, repoUrl));
+    }
+
 }
 
-function sendIssueCommentEmbed(event: any, channel: TextChannel): Promise<any> {
-    const title: string = event.payload.issue.title;
-    const description: string = `New comment was added to issue in repository ${event.repo.name}!`;
-    const commentUrl: string = event.payload.comment.html_url;
+export class CreateRepositoryConverter extends AbstractChainingEventToEmbedsConverter {
 
-    const bodyField: EmbedFieldData = { 
-        name: 'Comment Text', 
-        value: trimString(event.payload.comment.body, 128)
-    };
+    constructor() {
+        super('#00ff55');
+    }
 
-    const embed: MessageEmbed = createEmbed(event, title, description, commentUrl, '#ff00c8', [ bodyField ]);
-    return channel.send(embed);
+    protected canConvert(event: any): boolean {
+        return event?.type === 'CreateEvent' && event?.payload.ref_type === 'repository';
+    }
+
+    protected convert(event: any): MessageEmbed[] {
+        const repoUrl: string = this.getRepositoryUrl(event);
+        return [this.createEmbed(event, event.repo.name, 'New repository was created!', repoUrl)];
+    }
+
 }
 
-function sendForkEmbed(event: any, channel: TextChannel): Promise<any> {
-    const title: string = event.payload.forkee.full_name;
-    const description: string = `The repository ${event.repo.name} was forked into ${title}!`;
-    const newRepoUrl: string = `https://github.com/${title}`;
+export class CreateBranchConverter extends AbstractChainingEventToEmbedsConverter {
 
-    const embed: MessageEmbed = createEmbed(event, title, description, newRepoUrl, '#f2ff00');
-    return channel.send(embed);
+    constructor() {
+        super('#00ffa6');
+    }
+
+    protected canConvert(event: any): boolean {
+        return event?.type === 'CreateEvent' && event?.payload.ref_type === 'branch';
+    }
+
+    protected convert(event: any): MessageEmbed[] {
+        const repoUrl: string = this.getRepositoryUrl(event);
+        const description: string = `New branch in repository ${event.repo.name} was created!`;
+        return [this.createEmbed(event, event.payload.ref, description, repoUrl)];
+    }
+
 }
 
-function sendWatchEmbed(event: any, channel: TextChannel): Promise<any> {
-    const title: string = event.repo.name;
-    const description: string = `${event.actor.login} started stargazing the ${event.repo.name} repository!`;
-    const repoUrl: string = getRepoUrl(event);
+export class OpenIssueConverter extends AbstractChainingEventToEmbedsConverter {
 
-    const embed: MessageEmbed = createEmbed(event, title, description, repoUrl, '#7a2d00');
-    return channel.send(embed);
+    constructor() {
+        super('#9900ff');
+    }
+
+    protected canConvert(event: any): boolean {
+        return event?.type === 'IssuesEvent' && event?.payload.action === 'opened';
+    }
+
+    protected convert(event: any): MessageEmbed[] {
+        const title: string = event.payload.issue.title;
+        const issueUrl: string = event.payload.issue.html_url;
+        const description: string = `New issue in repository ${event.repo.name} was opened!`;
+        
+        const bodyField: EmbedFieldData = {
+            name: 'Issue Content',
+            value: trimString(event.payload.issue.body, 128)
+        }
+    
+        const embed: MessageEmbed = this.createEmbed(event, title, description, issueUrl);
+        embed.addFields(bodyField);
+
+        return [embed];
+    }
+
 }
+
+export class CloseIssueConverter extends AbstractChainingEventToEmbedsConverter {
+
+    constructor() {
+        super('#ff0048');
+    }
+
+    protected canConvert(event: any): boolean {
+        return event?.type === 'IssuesEvent' && event?.payload.action === 'closed';
+    }
+
+    protected convert(event: any): MessageEmbed[] {
+        const title: string = event.payload.issue.title;
+        const issueUrl: string = event.payload.issue.html_url;    
+        const description: string = `Issue in repository ${event.repo.name} was closed!`;
+
+        return [this.createEmbed(event, title, description, issueUrl)];
+    }
+
+}
+
+export class ReopenIssueConverter extends AbstractChainingEventToEmbedsConverter {
+
+    constructor() {
+        super('#ff00ea');
+    }
+
+    protected canConvert(event: any): boolean {
+        return event?.type === 'IssuesEvent' && event?.payload.action === 'reopened';
+    }
+
+    protected convert(event: any): MessageEmbed[] {
+        const title: string = event.payload.issue.title;
+        const issueUrl: string = event.payload.issue.html_url;
+        const description: string = `Issue in repository ${event.repo.name} was reopened!`;
+        
+        return [this.createEmbed(event, title, description, issueUrl)];
+    }
+
+}
+
+export class IssueCommentConverter extends AbstractChainingSpecificEventToEmbedsConverter {
+
+    constructor() {
+        super('IssueCommentEvent', '#ff00c8');
+    }
+
+    protected convert(event: any): MessageEmbed[] {
+        const title: string = event.payload.issue.title;
+        const description: string = `New comment was added to issue in repository ${event.repo.name}!`;
+        const commentUrl: string = event.payload.comment.html_url;
+    
+        const bodyField: EmbedFieldData = { 
+            name: 'Comment Text', 
+            value: trimString(event.payload.comment.body, 128)
+        };
+    
+        const embed: MessageEmbed = this.createEmbed(event, title, description, commentUrl);
+        embed.addFields(bodyField);
+
+        return [embed];
+    }
+
+}
+
+export class ForkConverter extends AbstractChainingSpecificEventToEmbedsConverter {
+
+    constructor() {
+        super('ForkEvent', '#f2ff00');
+    }
+
+    protected convert(event: any): MessageEmbed[] {
+        const title: string = event.payload.forkee.full_name;
+        const description: string = `The repository ${event.repo.name} was forked into ${title}!`;
+        const newRepoUrl: string = `https://github.com/${title}`;
+    
+        return [this.createEmbed(event, title, description, newRepoUrl)];
+    }
+
+}
+
+export class WatchConverter extends AbstractChainingSpecificEventToEmbedsConverter {
+
+    constructor() {
+        super('WatchEvent', '#7a2d00');
+    }
+
+    protected convert(event: any): MessageEmbed[] {
+        const title: string = event.repo.name;
+        const description: string = `${event.actor.login} started stargazing the ${event.repo.name} repository!`;
+        const repoUrl: string = this.getRepositoryUrl(event);
+    
+        return [this.createEmbed(event, title, description, repoUrl)];
+    }
+
+}
+
+export const ALL_CHAINING_CONVERTER_CONSTRUCTORS: ChainingEventToEmbedsConverterConstructor[] = [
+    PushConverter,
+    CreateRepositoryConverter,
+    CreateBranchConverter,
+    OpenIssueConverter,
+    CloseIssueConverter,
+    ReopenIssueConverter,
+    IssueCommentConverter,
+    ForkConverter,
+    WatchConverter
+];

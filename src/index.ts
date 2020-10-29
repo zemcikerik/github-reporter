@@ -1,60 +1,49 @@
-import { request } from '@octokit/request';
-import { OctokitResponse } from '@octokit/types';
-import { Channel, Client as DiscordClient, TextChannel } from 'discord.js';
-
-import { from, interval, Observable, zip } from 'rxjs';
+import { from, interval, zip } from 'rxjs';
 import { filter, map, mergeMap } from 'rxjs/operators';
 
 import { Person } from './models';
-import { sendEmbeds } from './embeds';
-import { USERNAMES, GITHUB_TOKEN, DISCORD_TOKEN, CHANNEL_ID, TOTAL_INTERVAL, INDIVIDUAL_INTERVAL } from './constants';
+import { ALL_CHAINING_CONVERTER_CONSTRUCTORS, EventToEmbedsConverter } from './embeds';
+import { INDIVIDUAL_INTERVAL, TOTAL_INTERVAL, USERNAMES } from './constants';
+import { Discord } from './discord';
+import { Configuration, ConstantConfiguration } from './configuration';
+import { GitHub } from './github';
+import { createAndJoinChainingConverters } from './helpers';
+import { MessageEmbed } from 'discord.js';
 
 
-const discord: DiscordClient = new DiscordClient();
-let channel: TextChannel;
+const config: Configuration = new ConstantConfiguration();
+const discord: Discord = new Discord(config);
+const github: GitHub = new GitHub(config);
+const converter: EventToEmbedsConverter = createAndJoinChainingConverters(ALL_CHAINING_CONVERTER_CONSTRUCTORS);
 
 const startDate: Date = new Date();
 const people: Person[] = USERNAMES.map(name => ({ username: name, lastRefresh: startDate }));
 
-interval(TOTAL_INTERVAL).pipe(
-    mergeMap(_ => 
-        zip(
-            from(people),
-            interval(INDIVIDUAL_INTERVAL)
-        ).pipe(
-            map(([person, _]) => person)
-        )
-    ),
-    mergeMap(person => getNewestEvents(person))
-)
-.subscribe(async (event: any) => await sendEmbeds(event, channel));
+discord.init()
+.then(() => {
+    interval(TOTAL_INTERVAL).pipe(
+        mergeMap(_ => 
+            zip(
+                from(people),
+                interval(INDIVIDUAL_INTERVAL)
+            ).pipe(
+                map(([person, _]) => person)
+            )
+        ),
+        mergeMap(person => github.getNewestEvents(person)),
+        map(event => converter.convertToEmbed(event)),
+        filter(embeds => embeds !== null),
+        mergeMap(embeds => from(<MessageEmbed[]> embeds))
+    )
+    .subscribe(async embed => await discord.sendEmbed(embed));
+})
+.catch(err => console.error(err));
 
-discord.on("ready", () => {
-    const foundChannel: Channel | undefined = discord.channels.cache
-        .find(channel => channel.id === CHANNEL_ID);
-
-    if (foundChannel === undefined || foundChannel.type !== "text") {
-        return;
-    }
-
-    channel = <TextChannel> foundChannel;
-});
-
-discord.login(DISCORD_TOKEN);
-
-function getNewestEvents(person: Person): Observable<any> {
-    const lastRefresh: Date = person.lastRefresh;
-    person.lastRefresh = new Date();
-
-    const promise: Promise<OctokitResponse<any>> = request('GET /users/:username/events', {
-        headers: {
-            authorization: 'token ' + GITHUB_TOKEN
-        },
-        username: person.username
-    });
-
-    return from(promise).pipe(
-        mergeMap(response => response.data.reverse()),
-        filter((event: any) => new Date(event.created_at) > lastRefresh)
-    );
+// TODO: use this
+function logUnknownEvent(event: any) {
+    const actorName: string = event.actor.login;
+    const eventType: string = event.type;
+    const repoName: string = event.repo.name;
+    const message: string = `Unknown event '${eventType}' in repository ${repoName} by ${actorName}`;
+    console.warn(message);
 }
