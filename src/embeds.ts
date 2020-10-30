@@ -1,4 +1,4 @@
-import { ColorResolvable, EmbedFieldData, MessageEmbed, TextChannel } from 'discord.js';
+import { ColorResolvable, EmbedFieldData, MessageEmbed } from 'discord.js';
 import { trimString } from './helpers';
 
 export interface EventToEmbedsConverter {
@@ -13,22 +13,13 @@ export interface ChainingEventToEmbedsConverterConstructor {
     new(): ChainingEventToEmbedsConverter;
 }
 
-export abstract class AbstractChainingEventToEmbedsConverter implements ChainingEventToEmbedsConverter {
-
-    protected nextConverter: EventToEmbedsConverter | undefined;
+export abstract class AbstractEventToEmbedsConverter implements EventToEmbedsConverter {
 
     constructor (protected color: ColorResolvable) 
     { }
 
-    protected abstract canConvert(event: any): boolean;
-    protected abstract convert(event: any): MessageEmbed[];
+    public abstract convertToEmbed(event: any): MessageEmbed[] | null;
 
-    public convertToEmbed(event: any): MessageEmbed[] | null {
-        return this.canConvert(event)
-            ? this.convert(event)
-            : this.nextConverter?.convertToEmbed(event) ?? null;
-    }
-    
     protected getRepositoryUrl(event: any): string {
         return `https://github.com/${event.repo.name}/`;
     }
@@ -44,6 +35,27 @@ export abstract class AbstractChainingEventToEmbedsConverter implements Chaining
             .setColor(this.color)
             .setAuthor(actor.login, actor.avatar_url, actorUrl)
             .setTimestamp(Date.parse(event.created_at));
+    }
+
+}
+
+export abstract class AbstractChainingEventToEmbedsConverter 
+    extends AbstractEventToEmbedsConverter 
+    implements ChainingEventToEmbedsConverter {
+
+    protected nextConverter: EventToEmbedsConverter | undefined;
+
+    constructor(color: ColorResolvable) {
+        super(color);
+    }
+
+    protected abstract canConvert(event: any): boolean;
+    protected abstract convert(event: any): MessageEmbed[];
+
+    public convertToEmbed(event: any): MessageEmbed[] | null {
+        return this.canConvert(event)
+            ? this.convert(event)
+            : this.nextConverter?.convertToEmbed(event) ?? null;
     }
 
     public setNextConverter(converter: EventToEmbedsConverter) {
@@ -80,14 +92,22 @@ export class PushConverter extends AbstractChainingSpecificEventToEmbedsConverte
 
 }
 
-export class CreateRepositoryConverter extends AbstractChainingEventToEmbedsConverter {
+export abstract class AbstractCreateConverter extends AbstractChainingEventToEmbedsConverter {
 
-    constructor() {
-        super('#00ff55');
+    constructor(private ref_type: string, color: ColorResolvable) {
+        super(color);
     }
 
     protected canConvert(event: any): boolean {
-        return event?.type === 'CreateEvent' && event?.payload.ref_type === 'repository';
+        return event?.type === 'CreateEvent' && event?.payload.ref_type === this.ref_type;
+    }
+
+}
+
+export class CreateRepositoryConverter extends AbstractCreateConverter {
+
+    constructor() {
+        super('repository', '#00ff55');
     }
 
     protected convert(event: any): MessageEmbed[] {
@@ -97,14 +117,10 @@ export class CreateRepositoryConverter extends AbstractChainingEventToEmbedsConv
 
 }
 
-export class CreateBranchConverter extends AbstractChainingEventToEmbedsConverter {
+export class CreateBranchConverter extends AbstractCreateConverter {
 
     constructor() {
-        super('#00ffa6');
-    }
-
-    protected canConvert(event: any): boolean {
-        return event?.type === 'CreateEvent' && event?.payload.ref_type === 'branch';
+        super('branch', '#00ffa6');
     }
 
     protected convert(event: any): MessageEmbed[] {
@@ -115,14 +131,22 @@ export class CreateBranchConverter extends AbstractChainingEventToEmbedsConverte
 
 }
 
-export class OpenIssueConverter extends AbstractChainingEventToEmbedsConverter {
+export abstract class AbstractIssueConverter extends AbstractChainingEventToEmbedsConverter {
 
-    constructor() {
-        super('#9900ff');
+    constructor(private action: string, color: ColorResolvable) {
+        super(color);
     }
 
     protected canConvert(event: any): boolean {
-        return event?.type === 'IssuesEvent' && event?.payload.action === 'opened';
+        return event?.type === 'IssuesEvent' && event?.payload.action === this.action;
+    }
+
+}
+
+export class OpenIssueConverter extends AbstractIssueConverter {
+
+    constructor() {
+        super('opened', '#9900ff');
     }
 
     protected convert(event: any): MessageEmbed[] {
@@ -143,14 +167,10 @@ export class OpenIssueConverter extends AbstractChainingEventToEmbedsConverter {
 
 }
 
-export class CloseIssueConverter extends AbstractChainingEventToEmbedsConverter {
+export class CloseIssueConverter extends AbstractIssueConverter {
 
     constructor() {
-        super('#ff0048');
-    }
-
-    protected canConvert(event: any): boolean {
-        return event?.type === 'IssuesEvent' && event?.payload.action === 'closed';
+        super('closed', '#ff0048');
     }
 
     protected convert(event: any): MessageEmbed[] {
@@ -163,14 +183,10 @@ export class CloseIssueConverter extends AbstractChainingEventToEmbedsConverter 
 
 }
 
-export class ReopenIssueConverter extends AbstractChainingEventToEmbedsConverter {
+export class ReopenIssueConverter extends AbstractIssueConverter {
 
     constructor() {
-        super('#ff00ea');
-    }
-
-    protected canConvert(event: any): boolean {
-        return event?.type === 'IssuesEvent' && event?.payload.action === 'reopened';
+        super('reopened', '#ff00ea');
     }
 
     protected convert(event: any): MessageEmbed[] {

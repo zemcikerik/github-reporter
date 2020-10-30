@@ -1,4 +1,4 @@
-import { from, interval, zip } from 'rxjs';
+import { from, interval, Subscription, zip } from 'rxjs';
 import { filter, map, mergeMap } from 'rxjs/operators';
 
 import { Person } from './models';
@@ -15,6 +15,8 @@ const config: Configuration = new ConstantConfiguration();
 const discord: Discord = new Discord(config);
 const github: GitHub = new GitHub(config);
 const converter: EventToEmbedsConverter = createAndJoinChainingConverters(ALL_CHAINING_CONVERTER_CONSTRUCTORS);
+
+// let subscription: Subscription | undefined;
 
 const startDate: Date = new Date();
 const people: Person[] = USERNAMES.map(name => ({ username: name, lastRefresh: startDate }));

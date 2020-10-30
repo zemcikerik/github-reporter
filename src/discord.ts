@@ -17,6 +17,8 @@ export class Discord {
         const token: string = this.config.getDiscordToken();
         await this.client.login(token);
 
+        this.reloadTargetChannels();
+
         this.configChangeSubscription = this.config.onChange$
             .subscribe(change => this.onConfigChange(change));
     }
