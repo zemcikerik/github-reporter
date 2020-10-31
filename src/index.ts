@@ -1,51 +1,54 @@
-import { from, interval, Subscription, zip } from 'rxjs';
-import { filter, map, mergeMap } from 'rxjs/operators';
-
-import { Person } from './models';
-import { ALL_CHAINING_CONVERTER_CONSTRUCTORS, EventToEmbedsConverter } from './embeds';
-import { INDIVIDUAL_INTERVAL, TOTAL_INTERVAL, USERNAMES } from './constants';
-import { Discord } from './discord';
-import { Configuration, ConstantConfiguration } from './configuration';
-import { GitHub } from './github';
-import { createAndJoinChainingConverters } from './helpers';
+import { defer, from, interval, of, zip } from 'rxjs';
+import { filter, map, mergeMap, repeat, tap } from 'rxjs/operators';
 import { MessageEmbed } from 'discord.js';
 
+import { FileConfiguration } from './configuration';
+import { Discord } from './discord';
+import { GitHub } from './github';
 
-const config: Configuration = new ConstantConfiguration();
+import { ALL_CHAINING_CONVERTER_CONSTRUCTORS, EventToEmbedsConverter, UnknownToConsoleConverter } from './embeds';
+import { createAndJoinChainingConverters } from './helpers';
+import { CommandHandler, TestCommandHandler } from './commands';
+import { resolve as resolvePath } from 'path';
+
+
+const config: FileConfiguration = new FileConfiguration(resolvePath(__dirname, '../bot-config.json'));
 const discord: Discord = new Discord(config);
 const github: GitHub = new GitHub(config);
-const converter: EventToEmbedsConverter = createAndJoinChainingConverters(ALL_CHAINING_CONVERTER_CONSTRUCTORS);
 
-// let subscription: Subscription | undefined;
+const commandHandler: CommandHandler = new TestCommandHandler(discord, config);
+const converter: EventToEmbedsConverter = createAndJoinChainingConverters(ALL_CHAINING_CONVERTER_CONSTRUCTORS, UnknownToConsoleConverter);
 
-const startDate: Date = new Date();
-const people: Person[] = USERNAMES.map(name => ({ username: name, lastRefresh: startDate }));
+config.load()
+.then(async () => {
+    await discord.init();
 
-discord.init()
-.then(() => {
-    interval(TOTAL_INTERVAL).pipe(
-        mergeMap(_ => 
+    config.onChange$.subscribe(async _ => await config.save());
+
+    defer(() => of(config.delayBetweenRequests))
+    .pipe(
+        mergeMap(delay => 
             zip(
-                from(people),
-                interval(INDIVIDUAL_INTERVAL)
-            ).pipe(
-                map(([person, _]) => person)
+                defer(() => from(config.people)),
+                interval(delay)
             )
         ),
+        tap(person => console.log(person)),
+        map(([person, _]) => person),
         mergeMap(person => github.getNewestEvents(person)),
         map(event => converter.convertToEmbed(event)),
         filter(embeds => embeds !== null),
-        mergeMap(embeds => from(<MessageEmbed[]> embeds))
+        mergeMap(embeds => from(<MessageEmbed[]> embeds)),
+        repeat()
     )
-    .subscribe(async embed => await discord.sendEmbed(embed));
+    .subscribe({
+        next: async embed => await discord.sendEmbed(embed),
+        error: err => console.error(err)
+    });
+
+    discord.onCommand$.subscribe({
+        next: async command => await commandHandler.handleCommand(command),
+        error: err => console.error(err)
+    })
 })
 .catch(err => console.error(err));
-
-// TODO: use this
-function logUnknownEvent(event: any) {
-    const actorName: string = event.actor.login;
-    const eventType: string = event.type;
-    const repoName: string = event.repo.name;
-    const message: string = `Unknown event '${eventType}' in repository ${repoName} by ${actorName}`;
-    console.warn(message);
-}

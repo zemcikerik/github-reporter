@@ -1,4 +1,6 @@
 src/constants.ts
+.vscode/
+bot-config.json
 
 # Logs
 logs

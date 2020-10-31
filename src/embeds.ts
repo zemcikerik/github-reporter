@@ -9,6 +9,10 @@ export interface ChainingEventToEmbedsConverter extends EventToEmbedsConverter {
     setNextConverter(converter: EventToEmbedsConverter): void;
 }
 
+export interface EventToEmbedsConverterConstructor {
+    new(): EventToEmbedsConverter;
+}
+
 export interface ChainingEventToEmbedsConverterConstructor {
     new(): ChainingEventToEmbedsConverter;
 }
@@ -251,6 +255,22 @@ export class WatchConverter extends AbstractChainingSpecificEventToEmbedsConvert
         const repoUrl: string = this.getRepositoryUrl(event);
     
         return [this.createEmbed(event, title, description, repoUrl)];
+    }
+
+}
+
+export class UnknownToConsoleConverter extends AbstractEventToEmbedsConverter {
+    
+    constructor() {
+        super('DEFAULT');
+    }
+
+    public convertToEmbed(event: any): null {
+        const actorName: string = event.actor.login;
+        const eventType: string = event.type;
+        const repoName: string = event.repo.name;
+        console.warn(`Unknown event '${eventType}' in repository ${repoName} by ${actorName}`);
+        return null;
     }
 
 }

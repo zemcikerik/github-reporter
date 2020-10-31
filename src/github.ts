@@ -18,7 +18,7 @@ export class GitHub {
     
         const promise: Promise<OctokitResponse<any>> = request('GET /users/:username/events', {
             headers: {
-                authorization: 'token ' + this.config.getGithubToken()
+                authorization: 'token ' + this.config.githubToken
             },
             username: person.username
         });
