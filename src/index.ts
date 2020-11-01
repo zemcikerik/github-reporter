@@ -8,7 +8,7 @@ import { GitHub } from './github';
 
 import { ALL_CHAINING_CONVERTER_CONSTRUCTORS, EventToEmbedsConverter, UnknownToConsoleConverter } from './embeds';
 import { createAndJoinChainingConverters } from './helpers';
-import { CommandHandler, TestCommandHandler } from './commands';
+import { CommandHandler, CommandHandlerImpl } from './commands';
 import { resolve as resolvePath } from 'path';
 
 
@@ -16,7 +16,7 @@ const config: FileConfiguration = new FileConfiguration(resolvePath(__dirname, '
 const discord: Discord = new Discord(config);
 const github: GitHub = new GitHub(config);
 
-const commandHandler: CommandHandler = new TestCommandHandler(discord, github, config);
+const commandHandler: CommandHandler = new CommandHandlerImpl(discord, github, config);
 const converter: EventToEmbedsConverter = createAndJoinChainingConverters(ALL_CHAINING_CONVERTER_CONSTRUCTORS, UnknownToConsoleConverter);
 
 config.load()

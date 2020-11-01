@@ -8,7 +8,7 @@ export interface CommandHandler {
     handleCommand(command: Command): Promise<any>;
 }
 
-export class TestCommandHandler implements CommandHandler {
+export class CommandHandlerImpl implements CommandHandler {
 
     constructor(private discord: Discord,
         private github: GitHub,
