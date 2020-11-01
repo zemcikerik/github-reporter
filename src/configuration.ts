@@ -4,6 +4,7 @@ import { CHANNEL_ID, COMMAND_PREFIX, DISCORD_TOKEN, GITHUB_TOKEN, TOTAL_INTERVAL
 import { Person } from "./models";
 
 export enum ConfigurationParameter {
+    PEOPLE,
     TARGET_CHANNEL_IDS,
     COMMAND_CHANNEL_ID
 }
@@ -23,6 +24,7 @@ export interface Configuration {
 }
 
 export interface ModifiableConfiguration extends Configuration {
+    people: Person[];
     targetChannelIds: string[];
     commandChannelId: string;
 }
@@ -97,7 +99,7 @@ export class FileConfiguration implements ModifiableConfiguration {
             this.data.usernames = this._people.map(person => person.username);
         }
 
-        const json: string = JSON.stringify(this.data);
+        const json: string = JSON.stringify(this.data, null, 2);
         return writeFile(this.path, json);
     }
 
@@ -123,6 +125,11 @@ export class FileConfiguration implements ModifiableConfiguration {
 
     public get people(): Person[] {
         return this._people;
+    }
+
+    public set people(people: Person[]) {
+        this._people = people;
+        this.subject.next(ConfigurationParameter.PEOPLE);
     }
 
     public get delayBetweenRequests(): number {

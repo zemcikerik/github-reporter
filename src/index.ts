@@ -1,5 +1,5 @@
 import { defer, from, interval, of, zip } from 'rxjs';
-import { filter, map, mergeMap, repeat, tap } from 'rxjs/operators';
+import { filter, map, mergeMap, repeat } from 'rxjs/operators';
 import { MessageEmbed } from 'discord.js';
 
 import { FileConfiguration } from './configuration';
@@ -16,7 +16,7 @@ const config: FileConfiguration = new FileConfiguration(resolvePath(__dirname, '
 const discord: Discord = new Discord(config);
 const github: GitHub = new GitHub(config);
 
-const commandHandler: CommandHandler = new TestCommandHandler(discord, config);
+const commandHandler: CommandHandler = new TestCommandHandler(discord, github, config);
 const converter: EventToEmbedsConverter = createAndJoinChainingConverters(ALL_CHAINING_CONVERTER_CONSTRUCTORS, UnknownToConsoleConverter);
 
 config.load()
@@ -33,7 +33,6 @@ config.load()
                 interval(delay)
             )
         ),
-        tap(person => console.log(person)),
         map(([person, _]) => person),
         mergeMap(person => github.getNewestEvents(person)),
         map(event => converter.convertToEmbed(event)),

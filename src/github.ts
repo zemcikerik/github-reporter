@@ -1,5 +1,5 @@
-import { from, Observable } from 'rxjs';
-import { filter, mergeMap } from 'rxjs/operators';
+import { from, Observable, of } from 'rxjs';
+import { catchError, filter, map, mergeMap } from 'rxjs/operators';
 
 import { request } from '@octokit/request';
 import { OctokitResponse } from '@octokit/types';
@@ -26,6 +26,20 @@ export class GitHub {
         return from(promise).pipe(
             mergeMap(response => response.data.reverse()),
             filter((event: any) => new Date(event.created_at) > lastRefresh)
+        );
+    }
+
+    public checkIfUserExists(username: string): Observable<boolean> {
+        const promise = request('GET /users/:username', {
+            headers: {
+                authorization: 'token' + this.config.githubToken
+            },
+            username: username
+        });
+
+        return from(promise).pipe(
+            map(response => response.status === 200),
+            catchError(() => of(false))
         );
     }
 
