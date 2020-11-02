@@ -1,6 +1,5 @@
 import { readFile, writeFile } from "fs/promises";
-import { EMPTY, NEVER, Observable, Subject } from "rxjs";
-import { CHANNEL_ID, COMMAND_PREFIX, DISCORD_TOKEN, GITHUB_TOKEN, TOTAL_INTERVAL, USERNAMES } from "./constants";
+import { Observable, Subject } from "rxjs";
 import { Person } from "./models";
 
 export enum ConfigurationParameter {
@@ -27,49 +26,6 @@ export interface ModifiableConfiguration extends Configuration {
     people: Person[];
     targetChannelIds: string[];
     commandChannelId: string;
-}
-
-export class ConstantConfiguration implements Configuration {
-
-    private _people: Person[];
-
-    constructor() {
-        const startDate: Date = new Date();
-        this._people = USERNAMES.map(name => ({ username: name, lastRefresh: startDate }));
-    }
-
-    public get onChange$(): Observable<ConfigurationParameter> {
-        return NEVER;
-    }
-
-    public get discordToken(): string {
-        return DISCORD_TOKEN;
-    }
-
-    public get githubToken(): string {
-        return GITHUB_TOKEN;
-    }
-
-    public get people(): Person[] {
-        return this._people;
-    }
-
-    public get delayBetweenRequests(): number {
-        return TOTAL_INTERVAL / this.people.length;
-    }
-
-    public get targetChannelIds(): string[] {
-        return [CHANNEL_ID];
-    }
-
-    public get commandPrefix(): string {
-        return COMMAND_PREFIX;
-    }
-
-    public get commandChannelId(): string {
-        return CHANNEL_ID;
-    }
-
 }
 
 export class FileConfiguration implements ModifiableConfiguration {
