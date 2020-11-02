@@ -51,7 +51,7 @@ export class ConstantConfiguration implements Configuration {
     }
 
     public get people(): Person[] {
-        return [...this.people];
+        return this._people;
     }
 
     public get delayBetweenRequests(): number {

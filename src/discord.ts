@@ -39,6 +39,7 @@ export class Discord {
         
         this._onCommand$ = <Observable<Command>> message$.pipe(
             filter(message => message.guild !== null),
+            filter(message => message.member?.hasPermission('ADMINISTRATOR') ?? false),
             filter(message => message.channel.id === this.config.commandChannelId),
             filter(message => message.content.startsWith(this.config.commandPrefix)),
             map(message => this.messageToCommand(message)),
